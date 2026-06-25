@@ -1,0 +1,57 @@
+{
+  "dataset": "CoDEx-M",
+  "gating": "cardinality_only_T9",
+  "best_checkpoint": "checkpoints_codexm_UNMASKED/final",
+  "max_length": 128,
+  "per_bin_aggregated": {
+    "Bi-encoder": {
+      "1": 0.5954,
+      "2-9": 0.4060,
+      "10-99": 0.1903,
+      "100-999": 0.1308,
+      "1000+": 0.0783
+    },
+    "Unmasked InfoNCE": {
+      "1": 0.6510,
+      "2-9": 0.4941,
+      "10-99": 0.1885,
+      "100-999": 0.0617,
+      "1000+": 0.0383
+    },
+    "+ Gating": {
+      "1": 0.6510,
+      "2-9": 0.4941,
+      "10-99": 0.1954,
+      "100-999": 0.1308,
+      "1000+": 0.0783
+    },
+    "+ Fusion": {
+      "1": 0.6635,
+      "2-9": 0.5152,
+      "10-99": 0.1967,
+      "100-999": 0.1308,
+      "1000+": 0.0783
+    }
+  },
+  "totals": {
+    "Bi-encoder": 0.3064,
+    "Unmasked InfoNCE": 0.3281,
+    "+ Gating": 0.3459,
+    "+ Fusion": 0.3553
+  },
+  "counts_per_bin": {
+    "1": 3597,
+    "2-9": 6752,
+    "10-99": 4122,
+    "100-999": 3215,
+    "1000+": 2936
+  },
+  "alphas_bin": {
+    "1": 0.8,
+    "2-9": 0.85,
+    "10-99": 0.85,
+    "100-999": null,
+    "1000+": null
+  },
+  "source": "no_masked.ipynb cell 1 saved output (4-decimal precision); checkpoint at dora_and_maskedNCE/checkpoints_codexm_UNMASKED/final"
+}

@@ -1,0 +1,37 @@
+dataset: FB15k-237
+
+simkgc_data_dir: data/raw/FB15k-237
+biencoder_checkpoint: checkpoints/biencoder/FB15k-237/model_best.mdl
+mining_dir: data/mining/FB15k-237
+output_dir: checkpoints/reranker/FB15k-237
+
+pretrained_model: bert-base-uncased
+# FB15k-237 entity descriptions are longer (median 143, max 208 tokens).
+# An earlier max_length=96 truncated 97% of sequences; 224 fits the full distribution.
+max_length: 224
+per_device_train_batch_size: 8
+gradient_accumulation_steps: 4
+num_train_epochs: 3
+learning_rate: 2.0e-5
+weight_decay: 0.01
+warmup_ratio: 0.1
+max_grad_norm: 1.0
+dropout: 0.1
+bf16: true
+# Compute notes: reduced per-step batch + grad-accum to fit A100 80GB at max_length=224.
+# Effective batch size remains 32 (8 * 4).
+
+gate_threshold_T: 9
+
+alpha_bins_unmasked:
+  "1": null    # selected at runtime by 06_select_alpha.py
+  "2-9": null
+  "10-99": null
+  "100-999": null
+  "1000+": null
+alpha_bins_masked:
+  "1": 0.80
+  "2-9": 0.70
+  "10-99": 0.60
+  "100-999": null
+  "1000+": null

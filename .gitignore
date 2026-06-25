@@ -1,0 +1,57 @@
+# Vendored upstream code (cloned at setup time, not redistributed)
+vendored/
+
+# Raw datasets (downloaded by scripts/01_prepare_data.py)
+data/raw/
+
+# Mining shards (produced by scripts/03_mine_candidates.py)
+data/mining/
+
+# Trained checkpoints
+checkpoints/
+*.mdl
+*.safetensors
+*.bin
+*.pt
+*.pth
+
+# Logs
+logs/
+*.log
+runs/
+wandb/
+
+# Python build artifacts
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+
+# Virtualenvs
+.venv/
+venv/
+env/
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.swp
+
+# Notebook checkpoints
+.ipynb_checkpoints/
+
+# Local secrets (never)
+.env
+.env.local
+
+# Archives
+*.zip
+*.tar.gz
+*.tgz

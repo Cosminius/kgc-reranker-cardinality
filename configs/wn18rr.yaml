@@ -1,0 +1,35 @@
+dataset: WN18RR
+
+simkgc_data_dir: data/raw/WN18RR
+biencoder_checkpoint: checkpoints/biencoder/WN18RR/model_best.mdl
+mining_dir: data/mining/WN18RR
+output_dir: checkpoints/reranker/WN18RR
+
+pretrained_model: bert-base-uncased
+max_length: 128
+per_device_train_batch_size: 16
+gradient_accumulation_steps: 2
+num_train_epochs: 4
+learning_rate: 2.0e-5
+weight_decay: 0.01
+warmup_ratio: 0.1
+max_grad_norm: 1.0
+dropout: 0.1
+bf16: true
+# Sequence-length note: ~0.37% of WN18RR sequences exceed 128 tokens
+# under the unmasked-arm tokenization and are truncated. See main.pdf §4.2.
+
+gate_threshold_T: 9
+
+alpha_bins_unmasked:
+  "1": 0.55
+  "2-9": 0.70
+  "10-99": 0.90
+  "100-999": null
+  "1000+": null
+alpha_bins_masked:
+  "1": 0.55
+  "2-9": 0.50
+  "10-99": 0.35
+  "100-999": null
+  "1000+": null

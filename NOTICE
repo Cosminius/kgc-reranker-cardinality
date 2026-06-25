@@ -1,0 +1,74 @@
+Cardinality-Gated Reranking for Text-Based Knowledge Graph Completion
+Copyright 2026 Cosmin Rosculet
+
+This product includes software developed by Cosmin Rosculet
+(github.com/cosmin-rosculet/kgc-reranker-cardinality), licensed under
+the Apache License 2.0.
+
+================================================================
+Third-party software
+================================================================
+
+This project depends on, but does NOT redistribute, the following:
+
+----------------------------------------------------------------
+SimKGC (intfloat/SimKGC)
+----------------------------------------------------------------
+The bi-encoder stage of the pipeline is provided by SimKGC. The new
+repository does NOT ship a copy of SimKGC; instead, scripts/00_setup.py
+clones it on demand from upstream:
+
+    git clone https://github.com/intfloat/SimKGC vendored/SimKGC
+
+The upstream SimKGC repository does not include a LICENSE file or any
+written usage statement. Users of this project must obtain SimKGC
+directly from the upstream maintainers and must respect the original
+authors' rights. The cite below is the published artifact.
+
+Patches applied to the cloned SimKGC tree (see scripts/00_setup.py):
+  - vendored/SimKGC/trainer.py: changes the AdamW import from
+    `from transformers import AdamW` to `from torch.optim import AdamW`
+    (transformers >= 4.0 removed the re-export).
+
+Citation:
+
+    @inproceedings{wang-etal-2022-simkgc,
+        title     = "{S}im{KGC}: Simple Contrastive Knowledge Graph
+                     Completion with Pre-trained Language Models",
+        author    = "Wang, Liang and Zhao, Wei and Wei, Zhuoyu and
+                     Liu, Jingming",
+        booktitle = "Proceedings of the 60th Annual Meeting of the
+                     Association for Computational Linguistics
+                     (Volume 1: Long Papers)",
+        month     = may,
+        year      = "2022",
+        address   = "Dublin, Ireland",
+        publisher = "Association for Computational Linguistics",
+        url       = "https://aclanthology.org/2022.acl-long.295",
+        pages     = "4281--4294",
+    }
+
+----------------------------------------------------------------
+Datasets
+----------------------------------------------------------------
+CoDEx-M (Safavi & Koutra, 2020):
+    https://github.com/tsafavi/codex
+    Released under the CC-BY 4.0 license.
+
+FB15k-237 (Toutanova et al., 2015):
+    Originally derived from Freebase; commonly distributed via
+    https://www.microsoft.com/en-us/download/details.aspx?id=52312
+
+WN18RR (Dettmers et al., 2018):
+    Derived from WordNet; commonly distributed alongside the
+    ConvE codebase (github.com/TimDettmers/ConvE).
+
+scripts/01_prepare_data.py downloads each dataset from its upstream
+location at run time; this project does not redistribute any of them.
+
+----------------------------------------------------------------
+Pretrained models
+----------------------------------------------------------------
+The cross-encoder is initialized from bert-base-uncased
+(huggingface.co/bert-base-uncased) under the Apache License 2.0
+(Google AI Language).
