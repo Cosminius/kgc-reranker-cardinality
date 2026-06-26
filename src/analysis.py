@@ -37,4 +37,4 @@ def build_silaghi_format(*, threshold_T, alphas, gated_ranks, fused_ranks, n_tra
 def write_silaghi_json(record, out_path):
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(record, indent=2))
+    out_path.write_text(json.dumps(record, indent=2), encoding="utf-8")

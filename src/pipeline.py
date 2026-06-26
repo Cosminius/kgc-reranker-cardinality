@@ -1,3 +1,13 @@
+"""End-to-end pipeline: mine + score + gate + alpha + fusion.
+
+`prepare_scored` returns the per-query score dicts for valid + test, after
+correcting n_filtered to the train-only count. It's the heavy work and is
+shared with diagnose_alpha.py.
+
+`evaluate_pipeline` adds the gate, alpha grid, fusion, and writes the
+silaghi_format JSON.
+"""
+
 import gc
 import glob
 import random
@@ -29,7 +39,33 @@ def _set_seed(seed):
     torch.cuda.manual_seed_all(seed)
 
 
-def evaluate_pipeline(cfg, repo_root, checkpoint, arm, seed):
+def _mine_valid_live(simkgc_data_dir, biencoder, simkgc_repo):
+    """Mine validation queries through the bi-encoder (live, so the gate
+    sees the same bi-encoder state as scoring)."""
+    valid_triples = load_triples(simkgc_data_dir, "valid")
+    valid_queries = expand_queries(valid_triples)
+    for q in valid_queries:
+        q["query_id"] = f"valid_{q['query_id']}"
+    valid_records = mine_top_k(
+        queries=valid_queries, biencoder_ckpt=str(biencoder),
+        simkgc_repo=str(simkgc_repo), simkgc_data_dir=str(simkgc_data_dir), K=50,
+    )
+    return valid_triples, valid_records
+
+
+def _load_test_records(mining_dir):
+    test_shards = sorted(glob.glob(str(mining_dir / "test_k50" / "shard_*.jsonl")))
+    if not test_shards:
+        raise SystemExit(f"No test_k50 shards in {mining_dir}; run mine_candidates first")
+    return list(Dataset.from_json(test_shards))
+
+
+def prepare_scored(cfg, repo_root, checkpoint, seed=None):
+    """Mine valid, score valid + test with the cross-encoder, correct
+    n_filtered to TRAIN-ONLY. Returns (valid_scored, test_scored, test_records, T).
+
+    Shared by evaluate_pipeline and scripts/diagnose_alpha.py.
+    """
     _set_seed(seed)
     simkgc_data_dir = repo_root / cfg["simkgc_data_dir"]
     mining_dir = repo_root / cfg["mining_dir"]
@@ -39,7 +75,6 @@ def evaluate_pipeline(cfg, repo_root, checkpoint, arm, seed):
     if not simkgc_repo.exists():
         raise SystemExit("vendored/SimKGC missing; run scripts/setup.py first")
 
-    print(f"=== Evaluate {cfg['dataset']} ({arm}) at T={T} ===")
     entity_text = load_entity_text_map(simkgc_data_dir)
     tokenizer = AutoTokenizer.from_pretrained(cfg["pretrained_model"])
     collator = UnmaskedKGCCollator(
@@ -48,27 +83,14 @@ def evaluate_pipeline(cfg, repo_root, checkpoint, arm, seed):
     )
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # Mine validation live so the gate sees the same bi-encoder state as scoring.
-    valid_triples = load_triples(simkgc_data_dir, "valid")
-    valid_queries = expand_queries(valid_triples)
-    for q in valid_queries:
-        q["query_id"] = f"valid_{q['query_id']}"
     print("  mining validation...")
-    valid_records = mine_top_k(
-        queries=valid_queries, biencoder_ckpt=str(biencoder),
-        simkgc_repo=str(simkgc_repo), simkgc_data_dir=str(simkgc_data_dir), K=50,
-    )
+    valid_triples, valid_records = _mine_valid_live(simkgc_data_dir, biencoder, simkgc_repo)
     torch.cuda.empty_cache(); gc.collect()
 
     model = AutoModelForSequenceClassification.from_pretrained(str(checkpoint)).to(device).eval()
-
     print("  scoring validation...")
     valid_scored = score_queries(valid_records, collator, model, device)
-
-    test_shards = sorted(glob.glob(str(mining_dir / "test_k50" / "shard_*.jsonl")))
-    if not test_shards:
-        raise SystemExit(f"No test_k50 shards in {mining_dir}; run mine_candidates first")
-    test_records = list(Dataset.from_json(test_shards))
+    test_records = _load_test_records(mining_dir)
     print("  scoring test...")
     test_scored = score_queries(test_records, collator, model, device)
     del model
@@ -80,6 +102,13 @@ def evaluate_pipeline(cfg, repo_root, checkpoint, arm, seed):
                  for r in test_records}
     correct_n_to_train_only(valid_scored, valid_qmap, train_only)
     correct_n_to_train_only(test_scored, test_qmap, train_only)
+
+    return valid_scored, test_scored, test_records, T
+
+
+def evaluate_pipeline(cfg, repo_root, checkpoint, arm, seed):
+    print(f"=== Evaluate {cfg['dataset']} ({arm}) at T={cfg['gate_threshold_T']} ===")
+    valid_scored, test_scored, _, T = prepare_scored(cfg, repo_root, checkpoint, seed)
 
     gated = apply_cardinality_gate(test_scored, threshold_T=T)
     alphas = select_alphas(valid_scored, threshold_T=T)

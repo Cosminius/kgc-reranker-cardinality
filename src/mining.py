@@ -13,7 +13,7 @@ def build_filter_index(simkgc_data_dir):
     Used at mining time only; the gate uses a train-only index."""
     index = defaultdict(set)
     for split in ("train", "valid", "test"):
-        with open(Path(simkgc_data_dir, f"{split}.txt.json")) as f:
+        with open(Path(simkgc_data_dir, f"{split}.txt.json"), encoding="utf-8") as f:
             for t in json.load(f):
                 index[(t["head_id"], t["relation"])].add(t["tail_id"])
                 index[(t["tail_id"], f"inverse {t['relation']}")].add(t["head_id"])
@@ -118,7 +118,7 @@ def _write_shards(records, out_dir, per_shard=5000):
     out_dir.mkdir(parents=True, exist_ok=True)
     for i in range(0, len(records), per_shard):
         idx = i // per_shard
-        with open(out_dir / f"shard_{idx:04d}.jsonl", "w") as f:
+        with open(out_dir / f"shard_{idx:04d}.jsonl", "w", encoding="utf-8") as f:
             for rec in records[i : i + per_shard]:
                 f.write(json.dumps(rec) + "\n")
 
@@ -134,7 +134,7 @@ def mine_split(repo_root, cfg, split, K):
     if not simkgc_repo.exists():
         raise SystemExit("vendored/SimKGC missing; run scripts/setup.py")
 
-    triples = json.loads(Path(simkgc_data_dir, f"{split}.txt.json").read_text())
+    triples = json.loads(Path(simkgc_data_dir, f"{split}.txt.json").read_text(encoding="utf-8"))
     queries = expand_queries(triples)
     print(f"  {split}: {len(queries):,} queries, K={K}")
 

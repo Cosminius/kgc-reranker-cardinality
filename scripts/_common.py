@@ -9,4 +9,4 @@ if str(REPO_ROOT) not in sys.path:
 
 
 def load_config(path):
-    return yaml.safe_load(Path(path).read_text())
+    return yaml.safe_load(Path(path).read_text(encoding="utf-8"))

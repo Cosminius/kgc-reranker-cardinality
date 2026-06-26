@@ -5,14 +5,14 @@ from pathlib import Path
 
 def load_entity_text_map(simkgc_data_dir):
     out = {}
-    for it in json.loads(Path(simkgc_data_dir, "entities.json").read_text()):
+    for it in json.loads(Path(simkgc_data_dir, "entities.json").read_text(encoding="utf-8")):
         eid = it["entity_id"]
         out[eid] = f"{it.get('entity', eid)}: {it.get('entity_desc', '')}".strip(": ").strip()
     return out
 
 
 def load_triples(simkgc_data_dir, split):
-    return json.loads(Path(simkgc_data_dir, f"{split}.txt.json").read_text())
+    return json.loads(Path(simkgc_data_dir, f"{split}.txt.json").read_text(encoding="utf-8"))
 
 
 def build_train_only_valid_tails(simkgc_data_dir):

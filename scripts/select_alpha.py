@@ -14,10 +14,10 @@ def main():
     p.add_argument("--T", type=int, default=9)
     p.add_argument("--out", default=None)
     args = p.parse_args()
-    alphas = select_alphas(json.loads(Path(args.scored).read_text()), threshold_T=args.T)
+    alphas = select_alphas(json.loads(Path(args.scored).read_text(encoding="utf-8")), threshold_T=args.T)
     print(f"T={args.T}  alphas: {alphas}")
     if args.out:
-        Path(args.out).write_text(json.dumps({"T": args.T, "alphas": alphas}, indent=2))
+        Path(args.out).write_text(json.dumps({"T": args.T, "alphas": alphas}, indent=2), encoding="utf-8")
 
 
 if __name__ == "__main__":

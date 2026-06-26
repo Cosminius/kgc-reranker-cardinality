@@ -68,16 +68,33 @@ results/   per-seed JSONs (silaghi_format)
 vendored/  cloned by setup.py (gitignored)
 ```
 
-## Seed
+## Seed and reproducibility
 
 `--seed <int>` is optional on every script. Omit for true RNG (production
-default). Pass `--seed 0` to reproduce the paper; results go to
+default). Pass `--seed 0` to reproduce the paper numbers; results go to
 `results/seed_0/`.
 
 The paper reports single-seed numbers by design. A meaningful mean +/- CI
 needs at least ~30 runs; with 3 the deviation is statistically hollow.
 The repo is set up for any seed sweep you want (`results/seed_<N>/`),
 but the published numbers are single-seed by intent.
+
+The paper numbers in `results/seed_0/*.json` come from a single stack:
+RTX 5070, PyTorch 2.8.0 + CUDA 12.9, transformers 5.12.1. Two consecutive
+runs of `scripts/evaluate.py --seed 0` produce bitwise-identical output.
+A different PyTorch/CUDA combination will drift by a few units in the 4th
+MRR decimal due to bf16 numerics, but the conclusions (gate + fusion
+improves over the bi-encoder on all three datasets; masked vs unmasked
+InfoNCE gives no consistent winner) don't change.
+
+### Known caveat: alpha overfits validation
+
+The per-bin alpha grid search picks alpha near 1.0 on all three datasets,
+which is where validation MRR peaks. Test MRR peaks lower (around 0.75-0.80
+at bin 2-9). The alphas in the JSONs and Tables 2/3/4/5 are the grid-selected
+ones; they're not test-optimal. To see the val-vs-test alpha curve yourself:
+
+    python scripts/diagnose_alpha.py --config configs/codex-m.yaml --checkpoint <ckpt>
 
 ## Built on SimKGC vs mine
 

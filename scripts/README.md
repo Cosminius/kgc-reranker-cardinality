@@ -10,6 +10,7 @@ Thin CLI wrappers; the real work lives in `src/`.
 | `train_reranker.py`  | Train the cross-encoder. Default: unmasked. `--masked` enables ablation arm. |
 | `evaluate.py`        | Rerank, gate, alpha grid, fusion -> silaghi_format JSON.                     |
 | `select_alpha.py`    | Standalone alpha grid search over a saved validation scoring dict.           |
+| `diagnose_alpha.py`  | Validation-vs-test alpha sweep; verifies the alpha overfitting noted in §5 Limitations. |
 
 Every script takes `--config configs/<dataset>.yaml` and an optional
 `--seed <int>`. Omit `--seed` for true RNG; pass `--seed 0` to reproduce
