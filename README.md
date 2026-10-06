@@ -1,7 +1,7 @@
-## Cardinality-Gated Reranking for Knowledge Graph Completion
+## When Cross-Encoder Reranking Fails in Knowledge Graph Completion
 
-Code for the paper "Cardinality-Gated Reranking: Making Bi-Encoder Knowledge Graph
-Completion Competitive at Low Cost" (Cosmin Rosculet, Gheorghe Cosmin Silaghi).
+Code for the paper "When Cross-Encoder Reranking Fails in Knowledge Graph Completion: Query
+Cardinality and Simple Score Fusion" (Cosmin Rosculet, Gheorghe Cosmin Silaghi).
 
 We rerank the top-50 candidates of a SimKGC bi-encoder with a BERT-base cross-encoder.
 The reranker helps on queries with few known answers and hurts on queries with many, so we
