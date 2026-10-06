@@ -30,11 +30,11 @@ def hits_at_k(ranks, k):
     return float(np.mean([0 < r <= k for r in ranks.values()]))
 
 
-def build_result_record(*, configs, n_train_by_qid, threshold_T, threshold_table, alphas,
-                        significance, meta):
+def build_result_record(*, configs, n_train_by_qid, selection, significance, meta):
     """Results for one dataset/arm.
 
-    configs: {name: {query_id: rank}} for "Bi-encoder", "Reranker", "+ Gate", "+ Fusion".
+    configs: {name: {query_id: rank}} for "Bi-encoder", "Reranker", "Global fusion", "Per-bin fusion".
+    selection: the values chosen on validation and the test accuracy of every gate threshold.
     """
     per_bin, totals, hits = {}, {}, {}
     counts = None
@@ -44,9 +44,11 @@ def build_result_record(*, configs, n_train_by_qid, threshold_T, threshold_table
         hits[name] = {f"H@{k}": hits_at_k(ranks, k) for k in (1, 3, 10)}
     return {
         **meta,
-        "gate_threshold_T": threshold_T,
-        "gate_threshold_validation_mrr": {str(t): v for t, v in threshold_table.items()},
-        "alphas_per_bin": alphas,
+        "gate_threshold_T": selection["gate_threshold_T"],
+        "alphas_per_bin": selection["alphas_per_bin"],
+        "global_alpha": selection["global_alpha"],
+        "validation_mrr_per_T": {str(k): v for k, v in selection["validation_mrr_per_T"].items()},
+        "gate_on_test": {str(k): v for k, v in selection["gate_on_test"].items()},
         "counts_per_bin": counts,
         "mrr_per_bin": per_bin,
         "mrr": totals,

@@ -2,8 +2,9 @@
 
 Everything that is chosen is chosen on the validation split:
   1. the cross-encoder checkpoint (validation MRR of the reranker alone),
-  2. the gate threshold T (validation MRR after the gate, over cfg["gate_threshold_grid"]),
-  3. the fusion weight of every admitted cardinality bin (validation MRR of that bin).
+  2. one fusion weight per cardinality bin, together with the optional gate threshold T
+     (validation MRR after fusion, over cfg["gate_threshold_grid"]; 10000 means no gate),
+  3. a single global weight, used only as a baseline.
 The test split is scored once, with those choices, and is only used for reporting.
 """
 
@@ -20,14 +21,14 @@ from transformers import AutoModelForSequenceClassification, AutoTokenizer
 from .analysis import build_result_record, total_mrr, write_rank_csv, write_results
 from .collator import UnmaskedKGCCollator
 from .datasets import build_train_only_valid_tails, correct_n_to_train_only, load_entity_text_map
-from .fusion import apply_fusion, select_alphas
-from .gate import apply_cardinality_gate, select_threshold
+from .fusion import FusionRanks, alpha_grid, apply_fusion
+from .gate import reranked_share, select_threshold
 from .scoring import autocast_dtype, compute_bi_and_re_ranks, score_queries
 from .stats import paired_test
 
-CONFIG_NAMES = ("Bi-encoder", "Reranker", "+ Gate", "+ Fusion")
-COMPARISONS = (("+ Fusion", "Bi-encoder"), ("Reranker", "Bi-encoder"), ("+ Gate", "Reranker"),
-               ("+ Fusion", "+ Gate"), ("+ Fusion", "Reranker"))
+CONFIG_NAMES = ("Bi-encoder", "Reranker", "Global fusion", "Per-bin fusion")
+COMPARISONS = (("Per-bin fusion", "Bi-encoder"), ("Reranker", "Bi-encoder"),
+               ("Global fusion", "Reranker"), ("Per-bin fusion", "Global fusion"))
 
 
 def _set_seed(seed):
@@ -54,6 +55,30 @@ def _score(records, checkpoint, collator, device, dtype, train_only):
     qmap = {r["query_id"]: (r["head_id"], r["relation"], r["gold_entity_id"]) for r in records}
     correct_n_to_train_only(scored, qmap, train_only)   # cardinality from training triples only
     return scored
+
+
+def select_and_evaluate(valid_scored, test_scored, cfg):
+    """Select the weights (and T) on validation and return the test ranks of every configuration."""
+    grid = alpha_grid(float(cfg.get("alpha_grid_step", 0.05)))
+    valid, test = FusionRanks(valid_scored, grid), FusionRanks(test_scored, grid)
+
+    T, alphas, t_table, alphas_by_T = select_threshold(valid, cfg["gate_threshold_grid"])
+    g = valid.select(lambda q: "all")["all"]
+    print(f"  T = {T} (validation MRR {t_table[T]:.4f}) | per-bin weights {alphas} | global weight {g}")
+
+    configs = {
+        "Bi-encoder": test.ranks(lambda q: 0.0),
+        "Reranker": test.ranks(lambda q: 1.0),
+        "Global fusion": test.ranks(lambda q: g),
+        "Per-bin fusion": apply_fusion(test, alphas, T),
+    }
+    # accuracy against computation for every threshold (weights re-selected on validation for each T)
+    gate_on_test = {T_: {"reranked_share": reranked_share(test, T_),
+                         "mrr": total_mrr(apply_fusion(test, alphas_by_T[T_], T_))}
+                    for T_ in cfg["gate_threshold_grid"]}
+    selection = {"gate_threshold_T": T, "alphas_per_bin": alphas, "global_alpha": g,
+                 "validation_mrr_per_T": t_table, "gate_on_test": gate_on_test}
+    return configs, selection
 
 
 def evaluate_pipeline(cfg, repo_root, checkpoints, arm, seed):
@@ -85,18 +110,8 @@ def evaluate_pipeline(cfg, repo_root, checkpoints, arm, seed):
     checkpoint, valid_scored = best
     print(f"  selected checkpoint: {checkpoint}")
 
-    # 2) gate threshold and 3) fusion weights, both on validation
-    T, t_table = select_threshold(valid_scored, cfg["gate_threshold_grid"])
-    step = float(cfg.get("alpha_grid_step", 0.05))
-    alphas = select_alphas(valid_scored, threshold_T=T, grid=np.round(np.arange(0.0, 1.0 + 1e-9, step), 10))
-    print(f"  gate T = {T} (validation MRR {t_table[T]:.4f}) | alphas = {alphas}")
-
-    # test, scored once
     test_scored = _score(test_records, checkpoint, collator, device, dtype, train_only)
-    bi_r, rr_r = compute_bi_and_re_ranks(test_scored)
-    gate_r = apply_cardinality_gate(test_scored, threshold_T=T)
-    fuse_r = apply_fusion(test_scored, alphas, threshold_T=T, gated_ranks=gate_r)
-    configs = dict(zip(CONFIG_NAMES, (bi_r, rr_r, gate_r, fuse_r)))
+    configs, selection = select_and_evaluate(valid_scored, test_scored, cfg)
     n_train = {qid: r["n_filtered"] for qid, r in test_scored.items()}
 
     qids = sorted(test_scored)
@@ -112,8 +127,7 @@ def evaluate_pipeline(cfg, repo_root, checkpoints, arm, seed):
         "stack": (f"{torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'cpu'}, "
                   f"torch {torch.__version__}, autocast {str(dtype).replace('torch.', '')}"),
     }
-    record = build_result_record(configs=configs, n_train_by_qid=n_train, threshold_T=T,
-                                 threshold_table=t_table, alphas=alphas,
+    record = build_result_record(configs=configs, n_train_by_qid=n_train, selection=selection,
                                  significance=significance, meta=meta)
 
     seed_tag = f"seed_{seed}" if seed is not None else "no_seed"
@@ -123,6 +137,8 @@ def evaluate_pipeline(cfg, repo_root, checkpoints, arm, seed):
     write_rank_csv(out_dir / f"{slug}_{arm}_ranks.csv", configs, test_scored, n_train)
 
     print("  test MRR: " + " | ".join(f"{c} {record['mrr'][c]:.4f}" for c in CONFIG_NAMES))
-    print("  test H@1/3/10 (+ Fusion): " + " / ".join(f"{v:.4f}" for v in record["hits"]["+ Fusion"].values()))
+    print("  test H@1/3/10 (per-bin fusion): " + " / ".join(f"{v:.4f}" for v in record["hits"]["Per-bin fusion"].values()))
+    for T, row in selection["gate_on_test"].items():
+        print(f"  gate T={T:>5}: reranked {row['reranked_share']:.1%} of test queries, test MRR {row['mrr']:.4f}")
     print(f"  saved {out_dir / f'{slug}_{arm}.json'}")
     return record

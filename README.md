@@ -5,23 +5,24 @@ Completion Competitive at Low Cost" (Cosmin Rosculet, Gheorghe Cosmin Silaghi).
 
 We rerank the top-50 candidates of a SimKGC bi-encoder with a BERT-base cross-encoder.
 The reranker helps on queries with few known answers and hurts on queries with many, so we
-rerank a query only if it has at most `T` other known answers in the training graph, and we
-mix the scores of the two models with one weight per cardinality bin. The cross-encoder
-epoch, `T` and the weights are chosen on the validation set.
+mix the scores of the two models with one weight per cardinality bin (the number of known
+answers of the query in the training graph). Optionally, queries with more than `T` known
+answers skip the cross-encoder to save computation. The cross-encoder epoch, the weights and
+`T` are chosen on the validation set (the weights and `T` together).
 
 ## Results
 
-Filtered test results, single seed. Every step (reranker, gate, fusion) is significant at
-p < 0.001 (paired randomisation test).
+Filtered test results. Every gain over SimKGC is significant at p < 0.001 (paired
+randomisation test). Validation selects no gate on all three datasets.
 
 | Dataset | Model | MRR | H@1 | H@3 | H@10 |
 |---|---|---|---|---|---|
 | CoDEx-M | SimKGC | 30.6 | 22.8 | 33.1 | 46.0 |
-| CoDEx-M | + gated reranking | **36.2** | **28.7** | **39.2** | **50.7** |
+| CoDEx-M | + reranking and fusion | **36.2** | **28.7** | **39.2** | **50.9** |
 | WN18RR | SimKGC | 67.1 | 59.5 | 71.5 | 80.5 |
-| WN18RR | + gated reranking | **73.1** | **66.7** | **77.2** | **85.0** |
+| WN18RR | + reranking and fusion | **73.9** | **67.3** | **78.2** | **86.0** |
 | FB15k-237 | SimKGC | 33.0 | 24.6 | 35.6 | 50.1 |
-| FB15k-237 | + gated reranking | **38.1** | **29.7** | **41.5** | **54.6** |
+| FB15k-237 | + reranking and fusion | **38.4** | **29.9** | **41.9** | **55.0** |
 
 ## Requirements
 
@@ -62,15 +63,15 @@ Step 3, train the cross-encoder (one checkpoint per epoch)
 python scripts/train_reranker.py --config configs/wn18rr.yaml --seed 0
 ```
 
-Step 4, select the epoch, `T` and the weights on validation and evaluate on test
+Step 4, select the epoch, the weights and `T` on validation and evaluate on test
 ```
 python scripts/evaluate.py --config configs/wn18rr.yaml --seed 0 \
     --checkpoint-dir checkpoints/reranker/WN18RR/unmasked
 ```
 
-Step 4 writes `results/seed_0/<dataset>_unmasked.json` (MRR and Hits@k per model and
-cardinality bin, the selected values, the significance tests) and a CSV with the rank of
-every test query.
+Step 4 writes `results/seed_0/<dataset>_unmasked.json` (MRR and Hits@k per configuration and
+cardinality bin, the selected values, the test MRR for every gate threshold, the significance
+tests) and a CSV with the rank of every test query.
 
 The paper uses these SimKGC checkpoints: `checkpoint_epoch7.mdl` for CoDEx-M (trained with
 SimKGC's FB15k-237 settings), `checkpoint_epoch48.mdl` for WN18RR and `model_best.mdl` for

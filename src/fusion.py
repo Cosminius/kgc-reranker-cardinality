@@ -15,6 +15,10 @@ def get_bin(cardinality):
     return "1000+"
 
 
+def alpha_grid(step=0.05):
+    return np.round(np.arange(0.0, 1.0 + 1e-9, step), 10)
+
+
 def min_max_normalize(scores):
     a = np.asarray(scores, dtype=np.float64)
     lo, hi = a.min(), a.max()
@@ -23,45 +27,55 @@ def min_max_normalize(scores):
     return (a - lo) / (hi - lo)
 
 
-def _fused_rank(r, alpha):
-    fused = alpha * min_max_normalize(r["rerank_scores"]) + (1 - alpha) * min_max_normalize(r["bi_scores"])
-    gold = r["gold_idx_in_topk"]
-    return int((fused > fused[gold]).sum()) + 1
+class FusionRanks:
+    """Rank of the gold answer under every fusion weight of the grid, computed once per query.
+
+    Weight 0 is the bi-encoder ranking and weight 1 the cross-encoder ranking. Queries whose
+    gold answer is outside the top-K keep their bi-encoder rank for every weight.
+    `n_filtered` must hold the number of other known answers in the training triples.
+    """
+
+    def __init__(self, scored, grid):
+        self.grid = [float(a) for a in grid]
+        assert self.grid[0] == 0.0 and self.grid[-1] == 1.0, "the grid must include 0 and 1"
+        self.qids = sorted(scored)
+        self.n_train = {q: scored[q]["n_filtered"] for q in self.qids}
+        self.reranked = []                    # queries whose gold answer is in the top-K
+        self.table = {}
+        a = np.asarray(self.grid)[:, None]
+        for q in self.qids:
+            r = scored[q]
+            if r["source"] == "bi_encoder_fallback":
+                self.table[q] = np.full(len(self.grid), r["bi_rank"])
+                continue
+            fused = a * min_max_normalize(r["rerank_scores"]) + (1 - a) * min_max_normalize(r["bi_scores"])
+            g = r["gold_idx_in_topk"]
+            self.table[q] = (fused > fused[:, [g]]).sum(axis=1) + 1
+            self.reranked.append(q)
+
+    def bin(self, q):
+        return get_bin(self.n_train[q] + 1)
+
+    def select(self, group_of, admitted=lambda q: True):
+        """Weight with the highest sum of reciprocal ranks in each group (validation).
+        Ties go to the smaller weight."""
+        groups = {}
+        for q in self.reranked:
+            if admitted(q):
+                groups.setdefault(group_of(q), []).append(q)
+        return {g: self.grid[int(np.argmax(np.sum([1.0 / self.table[q] for q in qs], axis=0)))]
+                for g, qs in groups.items()}
+
+    def ranks(self, alpha_of):
+        """{query: rank} with weight alpha_of(q); None means the bi-encoder ranking."""
+        return {q: int(self.table[q][self.grid.index(alpha_of(q) or 0.0)]) for q in self.qids}
 
 
-def select_alphas(valid_scored, threshold_T, grid=None):
-    """Per-bin alpha grid search on validation. None = bin has no admitted queries."""
-    if grid is None:
-        grid = np.arange(0.0, 1.01, 0.05)
-    alphas = {b: None for b in BINS}
-    for b in BINS:
-        admitted = [
-            qid for qid, r in valid_scored.items()
-            if r["source"] == "reranker"
-            and r["n_filtered"] <= threshold_T
-            and get_bin(r["n_filtered"] + 1) == b
-        ]
-        if not admitted:
-            continue
-        best_a, best_score = 0.5, -1.0
-        for a in grid:
-            total_rr = sum(1.0 / _fused_rank(valid_scored[qid], a) for qid in admitted)
-            if total_rr > best_score:
-                best_score, best_a = total_rr, float(a)
-        alphas[b] = best_a
-    return alphas
+def select_alphas(fr, threshold_T):
+    """One weight per cardinality bin, from the validation queries the gate admits."""
+    return fr.select(fr.bin, admitted=lambda q: fr.n_train[q] <= threshold_T)
 
 
-def apply_fusion(test_scored, alphas, threshold_T, gated_ranks):
-    out = {}
-    for qid, r in test_scored.items():
-        if r["source"] == "bi_encoder_fallback":
-            out[qid] = r["bi_rank"]
-            continue
-        b = get_bin(r["n_filtered"] + 1)
-        a = alphas.get(b)
-        if a is None or r["n_filtered"] > threshold_T:
-            out[qid] = gated_ranks[qid]
-        else:
-            out[qid] = _fused_rank(r, a)
-    return out
+def apply_fusion(fr, alphas, threshold_T):
+    """Per-bin fusion; queries above the gate threshold keep the bi-encoder ranking."""
+    return fr.ranks(lambda q: alphas.get(fr.bin(q)) if fr.n_train[q] <= threshold_T else None)
