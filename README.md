@@ -20,8 +20,8 @@ p < 0.001 (paired randomisation test).
 | CoDEx-M | + gated reranking | **36.2** | **28.7** | **39.2** | **50.7** |
 | WN18RR | SimKGC | 67.1 | 59.5 | 71.5 | 80.5 |
 | WN18RR | + gated reranking | **73.1** | **66.7** | **77.2** | **85.0** |
-| FB15k-237 | SimKGC | 33.0 | | | |
-| FB15k-237 | + gated reranking | coming soon | | | |
+| FB15k-237 | SimKGC | 33.0 | 24.6 | 35.6 | 50.1 |
+| FB15k-237 | + gated reranking | **38.1** | **29.7** | **41.5** | **54.6** |
 
 ## Requirements
 
