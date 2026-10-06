@@ -1,7 +1,8 @@
-def apply_cardinality_gate(test_scored, threshold_T):
-    """Rerank when n_train <= T, else keep bi-encoder ranking."""
+def apply_cardinality_gate(scored, threshold_T):
+    """Rerank a query when it has at most T other known training answers (cardinality <= T + 1);
+    otherwise keep the bi-encoder ranking. `n_filtered` must hold the train-only count."""
     out = {}
-    for qid, r in test_scored.items():
+    for qid, r in scored.items():
         if r["source"] == "bi_encoder_fallback":
             out[qid] = r["bi_rank"]
             continue
@@ -12,3 +13,12 @@ def apply_cardinality_gate(test_scored, threshold_T):
             scores = r["bi_scores"]
         out[qid] = sum(s > scores[gold] for s in scores) + 1
     return out
+
+
+def select_threshold(valid_scored, grid):
+    """Gate threshold with the highest validation MRR (gate only, before fusion).
+    Ties go to the earliest value in `grid`. Returns (T, {T: validation MRR})."""
+    from .analysis import total_mrr
+
+    table = {T: total_mrr(apply_cardinality_gate(valid_scored, T)) for T in grid}
+    return max(grid, key=lambda T: table[T]), table

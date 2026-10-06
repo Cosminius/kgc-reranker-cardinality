@@ -1,114 +1,88 @@
-# Cardinality-Gated Reranking for Text-Based KGC
+## Cardinality-Gated Reranking for Knowledge Graph Completion
 
-Code for *Cardinality-Gated Reranking for Text-Based Knowledge Graph Completion*
-(Cosmin Rosculet, Babes-Bolyai University).
+Code for the paper "Cardinality-Gated Reranking: Making Bi-Encoder Knowledge Graph
+Completion Competitive at Low Cost" (Cosmin Rosculet, Gheorghe Cosmin Silaghi).
 
-## Pipeline
+We rerank the top-50 candidates of a SimKGC bi-encoder with a BERT-base cross-encoder.
+The reranker helps on queries with few known answers and hurts on queries with many, so we
+rerank a query only if it has at most `T` other known answers in the training graph, and we
+mix the scores of the two models with one weight per cardinality bin. The cross-encoder
+epoch, `T` and the weights are chosen on the validation set.
+
+## Results
+
+Filtered test results, single seed. Every step (reranker, gate, fusion) is significant at
+p < 0.001 (paired randomisation test).
+
+| Dataset | Model | MRR | H@1 | H@3 | H@10 |
+|---|---|---|---|---|---|
+| CoDEx-M | SimKGC | 30.6 | 22.8 | 33.1 | 46.0 |
+| CoDEx-M | + gated reranking | **36.2** | **28.7** | **39.2** | **50.7** |
+| WN18RR | SimKGC | 67.1 | 59.5 | 71.5 | 80.5 |
+| WN18RR | + gated reranking | **73.1** | **66.7** | **77.2** | **85.0** |
+| FB15k-237 | SimKGC | 33.0 | | | |
+| FB15k-237 | + gated reranking | coming soon | | | |
+
+## Requirements
+
+* python>=3.9
+* torch>=2.7
+* transformers>=5.0
 
 ```
-SimKGC bi-encoder -> top-K mining -> BERT cross-encoder
-                                          |
-                                          v
-                              cardinality gate (T=9)
-                                          |
-                                          v
-                              per-bin score fusion -> ranked tail
+pip install -r requirements.txt
+python scripts/setup.py
 ```
 
-The two new ideas: the **cardinality gate** (rerank only when the
-(head, relation) has at most T+1 valid tails in the training graph;
-otherwise keep the bi-encoder ranking) and **per-bin score fusion**
-(mix rerank + bi with a per-cardinality-bin alpha selected on validation).
-
-## Setup
-
-```bash
-python scripts/setup.py   # clones vendored/SimKGC and patches its AdamW import
-```
+`setup.py` downloads [SimKGC](https://github.com/intfloat/SimKGC) into `vendored/`.
+Any CUDA GPU works (bf16 on recent GPUs, fp16 on older ones such as the T4).
 
 ## Data
 
-Each `configs/<dataset>.yaml` has a `simkgc_data_dir` field. Point it at a
-folder containing the SimKGC-preprocessed JSON files for that dataset:
+For WN18RR and FB15k-237 we use the files from [KG-BERT](https://github.com/yao8839836/kg-bert),
+for CoDEx-M the files from [CoDEx](https://github.com/tsafavi/codex). Convert them with
+SimKGC's `preprocess.py` and set `simkgc_data_dir` in `configs/<dataset>.yaml`.
 
+## How to Run
+
+Each dataset has a config in `configs/` (`codex-m.yaml`, `wn18rr.yaml`, `fb15k-237.yaml`).
+
+Step 1, train the SimKGC bi-encoder
 ```
-<simkgc_data_dir>/
-  train.txt.json
-  valid.txt.json
-  test.txt.json
-  entities.json
-```
-
-This repo does not download datasets. CoDEx-M comes from
-`github.com/tsafavi/codex`; FB15k-237 and WN18RR from
-`github.com/yao8839836/kg-bert/tree/master/data`. Run them through
-`vendored/SimKGC/preprocess.py` to get the JSON layout above.
-
-## Run
-
-```bash
-python scripts/train_biencoder.py --config configs/codex-m.yaml
-python scripts/mine_candidates.py --config configs/codex-m.yaml
-python scripts/train_reranker.py  --config configs/codex-m.yaml
-python scripts/evaluate.py        --config configs/codex-m.yaml \
-                                  --checkpoint checkpoints/reranker/CoDEx-M/unmasked/final
+python scripts/train_biencoder.py --config configs/wn18rr.yaml --seed 0
 ```
 
-Output: `results/no_seed/codex_m_unmasked.json` (gating_total, fusion_total,
-per-bin MRR, selected alphas). For the masked ablation arm, add `--masked`
-to step 3 and `--arm masked` to step 4.
-
-## Folder layout
-
+Step 2, mine the top-50 candidates for train, validation and test
 ```
-configs/   per-dataset YAML
-src/       library
-scripts/   thin CLI wrappers around src/
-results/   per-seed JSONs (silaghi_format)
-vendored/  cloned by setup.py (gitignored)
+python scripts/mine_candidates.py --config configs/wn18rr.yaml
 ```
 
-## Seed and reproducibility
+Step 3, train the cross-encoder (one checkpoint per epoch)
+```
+python scripts/train_reranker.py --config configs/wn18rr.yaml --seed 0
+```
 
-`--seed <int>` is optional on every script. Omit for true RNG (production
-default). Pass `--seed 0` to reproduce the paper numbers; results go to
-`results/seed_0/`.
+Step 4, select the epoch, `T` and the weights on validation and evaluate on test
+```
+python scripts/evaluate.py --config configs/wn18rr.yaml --seed 0 \
+    --checkpoint-dir checkpoints/reranker/WN18RR/unmasked
+```
 
-The paper reports single-seed numbers by design. A meaningful mean +/- CI
-needs at least ~30 runs; with 3 the deviation is statistically hollow.
-The repo is set up for any seed sweep you want (`results/seed_<N>/`),
-but the published numbers are single-seed by intent.
+Step 4 writes `results/seed_0/<dataset>_unmasked.json` (MRR and Hits@k per model and
+cardinality bin, the selected values, the significance tests) and a CSV with the rank of
+every test query.
 
-The paper numbers in `results/seed_0/*.json` come from a single stack:
-RTX 5070, PyTorch 2.8.0 + CUDA 12.9, transformers 5.12.1. Two consecutive
-runs of `scripts/evaluate.py --seed 0` produce bitwise-identical output.
-A different PyTorch/CUDA combination will drift by a few units in the 4th
-MRR decimal due to bf16 numerics, but the conclusions (gate + fusion
-improves over the bi-encoder on all three datasets; masked vs unmasked
-InfoNCE gives no consistent winner) don't change.
+The paper uses these SimKGC checkpoints: `checkpoint_epoch7.mdl` for CoDEx-M (trained with
+SimKGC's FB15k-237 settings), `checkpoint_epoch48.mdl` for WN18RR and `model_best.mdl` for
+FB15k-237 (`biencoder_checkpoint` in the configs).
 
-### Known caveat: alpha overfits validation
+## Notes
 
-The per-bin alpha grid search picks alpha near 1.0 on all three datasets,
-which is where validation MRR peaks. Test MRR peaks lower (around 0.75-0.80
-at bin 2-9). The alphas in the JSONs and Tables 2/3/4/5 are the grid-selected
-ones; they're not test-optimal. To see the val-vs-test alpha curve yourself:
-
-    python scripts/diagnose_alpha.py --config configs/codex-m.yaml --checkpoint <ckpt>
-
-## Built on SimKGC vs mine
-
-- **SimKGC** (cloned at setup, not redistributed): the bi-encoder model,
-  its training loop, and tokenization. Lives under `vendored/SimKGC/`.
-- **Mine**: everything under `src/` and `scripts/`. The cross-encoder
-  reranker, the cardinality gate, the per-bin score fusion, the mining
-  wrapper, and the analysis/JSON output.
-
-Upstream SimKGC has no LICENSE file. We do not redistribute it; please
-respect the original authors' rights. See [NOTICE](NOTICE).
+* `simkgc_task` in the configs is passed to SimKGC as `--task`. Keep it: SimKGC's default
+  (`wn18rr`) rewrites entity names in WordNet style and erases the names of other datasets.
+* `--masked` in step 3 and `--arm masked` in step 4 train and evaluate a masked InfoNCE
+  variant. It is an extra experiment and is not used in the paper.
 
 ## License
 
-Apache License 2.0 - see [LICENSE](LICENSE).
-
-Advised by Prof. Gheorghe Cosmin Silaghi.
+Apache 2.0. SimKGC is downloaded at setup and not included here, see [NOTICE](NOTICE).

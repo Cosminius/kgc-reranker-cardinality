@@ -1,10 +1,10 @@
 # Vendored upstream code (cloned at setup time, not redistributed)
 vendored/
 
-# Raw datasets (downloaded by scripts/01_prepare_data.py)
+# Datasets in SimKGC format (prepared with SimKGC's preprocess.py)
 data/raw/
 
-# Mining shards (produced by scripts/03_mine_candidates.py)
+# Candidate shards (scripts/mine_candidates.py)
 data/mining/
 
 # Trained checkpoints
@@ -50,6 +50,7 @@ Thumbs.db
 # Local secrets (never)
 .env
 .env.local
+kaggle.json
 
 # Archives
 *.zip

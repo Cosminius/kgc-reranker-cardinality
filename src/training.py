@@ -26,12 +26,11 @@ def _set_seed(seed):
     torch.cuda.manual_seed_all(seed)
 
 
-def _load_shards(mining_dir):
-    shards = sorted(glob.glob(str(mining_dir / "train_k50" / "shard_*.jsonl")))
+def _load_shards(mining_dir, top_k):
+    """Training queries whose gold tail is among the bi-encoder's top-K candidates."""
+    shards = sorted(glob.glob(str(mining_dir / f"train_k{top_k}" / "shard_*.jsonl")))
     if not shards:
-        shards = sorted(glob.glob(str(mining_dir / "train_k200" / "shard_*.jsonl")))
-    if not shards:
-        raise SystemExit(f"No training shards in {mining_dir}; run mine_candidates first")
+        raise SystemExit(f"No train_k{top_k} shards in {mining_dir}; run scripts/mine_candidates.py first")
     raw = Dataset.from_json(shards)
     return raw.filter(lambda ex: ex["gold_in_topk"] is True, num_proc=8)
 
@@ -46,7 +45,7 @@ def train_reranker(cfg, repo_root, masked, seed):
     output_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"=== Train {arm} reranker on {cfg['dataset']} (seed={seed}) ===")
-    train_dataset = _load_shards(mining_dir)
+    train_dataset = _load_shards(mining_dir, int(cfg.get("top_k", 50)))
     print(f"  recoverable: {len(train_dataset):,}")
 
     entity_text = load_entity_text_map(simkgc_data_dir)

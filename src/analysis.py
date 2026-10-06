@@ -1,3 +1,4 @@
+import csv
 import json
 from collections import defaultdict
 from pathlib import Path
@@ -7,34 +8,67 @@ import numpy as np
 from .fusion import BINS, get_bin
 
 
+def reciprocal_rank(rank):
+    """1/rank; a non-positive rank (gold entity unknown to the bi-encoder) counts as 0."""
+    return 1.0 / rank if rank > 0 else 0.0
+
+
 def per_bin_mrr(ranks, n_train_by_qid):
     by_bin = defaultdict(list)
     for qid, rank in ranks.items():
-        by_bin[get_bin(n_train_by_qid[qid] + 1)].append(rank)
-    mrr = {b: float(np.mean([1.0 / r for r in by_bin[b]])) if by_bin[b] else None for b in BINS}
+        by_bin[get_bin(n_train_by_qid[qid] + 1)].append(reciprocal_rank(rank))
+    mrr = {b: float(np.mean(by_bin[b])) if by_bin[b] else None for b in BINS}
     counts = {b: len(by_bin[b]) for b in BINS}
     return mrr, counts
 
 
 def total_mrr(ranks):
-    return float(np.mean([1.0 / r for r in ranks.values()]))
+    return float(np.mean([reciprocal_rank(r) for r in ranks.values()]))
 
 
-def build_silaghi_format(*, threshold_T, alphas, gated_ranks, fused_ranks, n_train_by_qid):
-    gating_per_bin, counts = per_bin_mrr(gated_ranks, n_train_by_qid)
-    fusion_per_bin, _ = per_bin_mrr(fused_ranks, n_train_by_qid)
+def hits_at_k(ranks, k):
+    return float(np.mean([0 < r <= k for r in ranks.values()]))
+
+
+def build_result_record(*, configs, n_train_by_qid, threshold_T, threshold_table, alphas,
+                        significance, meta):
+    """Results for one dataset/arm.
+
+    configs: {name: {query_id: rank}} for "Bi-encoder", "Reranker", "+ Gate", "+ Fusion".
+    """
+    per_bin, totals, hits = {}, {}, {}
+    counts = None
+    for name, ranks in configs.items():
+        per_bin[name], counts = per_bin_mrr(ranks, n_train_by_qid)
+        totals[name] = total_mrr(ranks)
+        hits[name] = {f"H@{k}": hits_at_k(ranks, k) for k in (1, 3, 10)}
     return {
-        "gating": f"cardinality_only_T{threshold_T}",
-        "alphas_bin": alphas,
-        "gating_per_bin": gating_per_bin,
-        "gating_total": total_mrr(gated_ranks),
-        "fusion_per_bin": fusion_per_bin,
-        "fusion_total": total_mrr(fused_ranks),
-        "counts": counts,
+        **meta,
+        "gate_threshold_T": threshold_T,
+        "gate_threshold_validation_mrr": {str(t): v for t, v in threshold_table.items()},
+        "alphas_per_bin": alphas,
+        "counts_per_bin": counts,
+        "mrr_per_bin": per_bin,
+        "mrr": totals,
+        "hits": hits,
+        "significance": significance,
     }
 
 
-def write_silaghi_json(record, out_path):
+def write_results(record, out_path):
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(record, indent=2), encoding="utf-8")
+
+
+def write_rank_csv(out_path, configs, scored, n_train_by_qid):
+    """One row per test query with its rank under every configuration (for paired tests)."""
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(out_path, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["query_id", "direction", "n_train", "bin", "source"] + [f"rank {c}" for c in configs])
+        for qid in sorted(scored):
+            r = scored[qid]
+            n = n_train_by_qid[qid]
+            w.writerow([qid, r["direction"], n, get_bin(n + 1), r["source"]] + [configs[c][qid] for c in configs])

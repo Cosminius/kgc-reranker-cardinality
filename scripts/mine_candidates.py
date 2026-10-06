@@ -1,4 +1,4 @@
-"""Mine top-K bi-encoder candidates for test/valid/train splits."""
+"""Mine filtered top-K bi-encoder candidates for the train / valid / test splits."""
 
 import argparse
 
@@ -11,13 +11,12 @@ def main():
     p.add_argument("--config", required=True)
     p.add_argument("--splits", nargs="+", default=["test", "valid", "train"],
                    choices=["test", "valid", "train"])
-    p.add_argument("--K_test", type=int, default=50)
-    p.add_argument("--K_train", type=int, default=200)
+    p.add_argument("--top-k", type=int, default=None, help="default: top_k from the config (50)")
     args = p.parse_args()
     cfg = load_config(args.config)
-    print(f"=== Mining {cfg['dataset']} ===")
+    K = args.top_k or int(cfg.get("top_k", 50))
+    print(f"=== Mining {cfg['dataset']} (SimKGC task: {cfg['simkgc_task']}, K={K}) ===")
     for s in args.splits:
-        K = args.K_train if s == "train" else args.K_test
         mine_split(REPO_ROOT, cfg, split=s, K=K)
 
 

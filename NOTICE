@@ -1,8 +1,8 @@
-Cardinality-Gated Reranking for Text-Based Knowledge Graph Completion
-Copyright 2026 Cosmin Rosculet
+Cardinality-Gated Reranking for Knowledge Graph Completion
+Copyright 2026 Cosmin Rosculet and Gheorghe Cosmin Silaghi
 
-This product includes software developed by Cosmin Rosculet
-(github.com/cosmin-rosculet/kgc-reranker-cardinality), licensed under
+This product includes software developed by the authors
+(github.com/Cosminius/kgc-reranker-cardinality), licensed under
 the Apache License 2.0.
 
 ================================================================
@@ -14,21 +14,21 @@ This project depends on, but does NOT redistribute, the following:
 ----------------------------------------------------------------
 SimKGC (intfloat/SimKGC)
 ----------------------------------------------------------------
-The bi-encoder stage of the pipeline is provided by SimKGC. The new
-repository does NOT ship a copy of SimKGC; instead, scripts/00_setup.py
-clones it on demand from upstream:
+The bi-encoder stage of the pipeline is provided by SimKGC. This
+repository does NOT ship a copy of SimKGC; scripts/setup.py clones it
+on demand from upstream:
 
     git clone https://github.com/intfloat/SimKGC vendored/SimKGC
 
 The upstream SimKGC repository does not include a LICENSE file or any
 written usage statement. Users of this project must obtain SimKGC
 directly from the upstream maintainers and must respect the original
-authors' rights. The cite below is the published artifact.
+authors' rights.
 
-Patches applied to the cloned SimKGC tree (see scripts/00_setup.py):
+Patch applied to the cloned SimKGC tree by scripts/setup.py:
   - vendored/SimKGC/trainer.py: changes the AdamW import from
     `from transformers import AdamW` to `from torch.optim import AdamW`
-    (transformers >= 4.0 removed the re-export).
+    (recent transformers releases removed the re-export).
 
 Citation:
 
@@ -55,20 +55,19 @@ CoDEx-M (Safavi & Koutra, 2020):
     https://github.com/tsafavi/codex
     Released under the CC-BY 4.0 license.
 
-FB15k-237 (Toutanova et al., 2015):
-    Originally derived from Freebase; commonly distributed via
-    https://www.microsoft.com/en-us/download/details.aspx?id=52312
+FB15k-237 (Toutanova & Chen, 2015):
+    Derived from Freebase; distributed with entity texts by KG-BERT
+    (github.com/yao8839836/kg-bert).
 
 WN18RR (Dettmers et al., 2018):
-    Derived from WordNet; commonly distributed alongside the
-    ConvE codebase (github.com/TimDettmers/ConvE).
+    Derived from WordNet; distributed with entity texts by KG-BERT
+    (github.com/yao8839836/kg-bert).
 
-scripts/01_prepare_data.py downloads each dataset from its upstream
-location at run time; this project does not redistribute any of them.
+This project does not download or redistribute any dataset.
 
 ----------------------------------------------------------------
 Pretrained models
 ----------------------------------------------------------------
-The cross-encoder is initialized from bert-base-uncased
-(huggingface.co/bert-base-uncased) under the Apache License 2.0
-(Google AI Language).
+The bi-encoder and the cross-encoder are initialized from
+bert-base-uncased (huggingface.co/bert-base-uncased), released under
+the Apache License 2.0 (Google AI Language).

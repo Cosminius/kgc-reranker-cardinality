@@ -5,7 +5,15 @@ from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
 
-def score_queries(records, collator, model, device, batch_size=32):
+def autocast_dtype(prefer_bf16=True):
+    """bf16 on GPUs with native support (compute capability >= 8, e.g. A100, RTX 30xx+),
+    fp16 otherwise (e.g. T4, which only emulates bf16 and runs it far slower)."""
+    if prefer_bf16 and torch.cuda.is_available() and torch.cuda.get_device_capability()[0] >= 8:
+        return torch.bfloat16
+    return torch.float16
+
+
+def score_queries(records, collator, model, device, batch_size=32, dtype=torch.bfloat16):
     out = {}
     in_topk = [r for r in records if r["gold_in_topk"]]
     fallback = [r for r in records if not r["gold_in_topk"]]
@@ -31,7 +39,7 @@ def score_queries(records, collator, model, device, batch_size=32):
             tt = batch.get("token_type_ids", torch.zeros_like(ii)).to(device)
             lb = batch["labels"].numpy()
             B, K_, L = ii.shape
-            with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+            with torch.autocast(device_type="cuda", dtype=dtype):
                 logits = model(
                     input_ids=ii.view(-1, L),
                     attention_mask=am.view(-1, L),

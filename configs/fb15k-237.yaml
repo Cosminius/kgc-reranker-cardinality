@@ -1,37 +1,41 @@
+# FB15k-237. Paths are relative to the repository root unless absolute.
+
 dataset: FB15k-237
 
+simkgc_task: fb15k237
+
 simkgc_data_dir: data/raw/FB15k-237
-biencoder_checkpoint: checkpoints/biencoder/FB15k-237/model_best.mdl
 mining_dir: data/mining/FB15k-237
 output_dir: checkpoints/reranker/FB15k-237
 
+# Bi-encoder (SimKGC): SimKGC's FB15k-237 recipe (scripts/train_fb.sh upstream);
+# the paper uses the best-validation checkpoint.
+biencoder_checkpoint: checkpoints/biencoder/FB15k-237/model_best.mdl
+biencoder:
+  pooling: mean
+  lr: 1.0e-5
+  batch_size: 1024
+  epochs: 10
+  additive_margin: 0.02
+  pre_batch: 2
+  use_self_negative: true
+  finetune_t: true
+  use_link_graph: true
+  use_amp: true
+
+# Cross-encoder reranker
 pretrained_model: bert-base-uncased
-# FB15k-237 entity descriptions are longer (median 143, max 208 tokens).
-# An earlier max_length=96 truncated 97% of sequences; 224 fits the full distribution.
-max_length: 224
+top_k: 50
+max_length: 224                 # long descriptions: median 143, max 208 tokens (no truncation)
 per_device_train_batch_size: 8
-gradient_accumulation_steps: 4
+gradient_accumulation_steps: 4  # effective batch: 32 queries (smaller steps to fit GPU memory)
 num_train_epochs: 3
 learning_rate: 2.0e-5
 weight_decay: 0.01
 warmup_ratio: 0.1
 max_grad_norm: 1.0
-dropout: 0.1
 bf16: true
-# Compute notes: reduced per-step batch + grad-accum to fit A100 80GB at max_length=224.
-# Effective batch size remains 32 (8 * 4).
 
-gate_threshold_T: 9
-
-alpha_bins_unmasked:
-  "1": null    # selected at runtime by 06_select_alpha.py
-  "2-9": null
-  "10-99": null
-  "100-999": null
-  "1000+": null
-alpha_bins_masked:
-  "1": 0.80
-  "2-9": 0.70
-  "10-99": 0.60
-  "100-999": null
-  "1000+": null
+# Selected on the validation split by scripts/evaluate.py
+gate_threshold_grid: [0, 1, 9, 99, 999, 10000]
+alpha_grid_step: 0.05

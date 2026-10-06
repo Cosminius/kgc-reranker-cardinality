@@ -41,10 +41,15 @@ def _import_simkgc(simkgc_repo):
             del sys.modules[m]
 
 
-def mine_top_k(queries, biencoder_ckpt, simkgc_repo, simkgc_data_dir, K=50):
+def mine_top_k(queries, biencoder_ckpt, simkgc_repo, simkgc_data_dir, task, K=50):
+    """Filtered top-K bi-encoder candidates per query.
+
+    `task` is passed to SimKGC as --task. It must be set explicitly: SimKGC's default
+    (wn18rr) parses WordNet-style entity names and erases the names of other datasets.
+    """
     _import_simkgc(simkgc_repo)
     sys.argv = [
-        "m", "--pretrained-model", "bert-base-uncased",
+        "m", "--pretrained-model", "bert-base-uncased", "--task", task,
         "--train-path", str(Path(simkgc_data_dir, "train.txt.json")),
         "--valid-path", str(Path(simkgc_data_dir, "valid.txt.json")),
         "--eval-model-path", biencoder_ckpt, "--is-test",
@@ -140,7 +145,8 @@ def mine_split(repo_root, cfg, split, K):
 
     records = mine_top_k(
         queries=queries, biencoder_ckpt=str(biencoder),
-        simkgc_repo=str(simkgc_repo), simkgc_data_dir=str(simkgc_data_dir), K=K,
+        simkgc_repo=str(simkgc_repo), simkgc_data_dir=str(simkgc_data_dir),
+        task=cfg["simkgc_task"], K=K,
     )
     for r in records:
         r["query_id"] = f"{split}_{r['query_id']}"

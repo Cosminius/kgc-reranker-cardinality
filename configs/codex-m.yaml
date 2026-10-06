@@ -1,54 +1,44 @@
-# Per-dataset configuration for CoDEx-M.
-# All values match what produced the paper's CoDEx-M numbers (Table 2).
-# Override on the CLI: `python scripts/04_train_reranker.py --config configs/codex-m.yaml --seed 0`
+# CoDEx-M. Paths are relative to the repository root unless absolute.
 
 dataset: CoDEx-M
 
-# Paths (relative to repo root unless absolute).
-# 01_prepare_data.py downloads raw triples + entity text into data/raw/CoDEx-M/.
-# 02_train_biencoder.py writes the SimKGC bi-encoder checkpoint into checkpoints/biencoder/CoDEx-M/.
-# 03_mine_candidates.py writes test top-50 and train top-200 shards into data/mining/CoDEx-M/.
-simkgc_data_dir: data/raw/CoDEx-M
-biencoder_checkpoint: checkpoints/biencoder/CoDEx-M/model_best.mdl
-mining_dir: data/mining/CoDEx-M
-output_dir: checkpoints/reranker/CoDEx-M
+# SimKGC's --task. Upstream SimKGC accepts only wn18rr / fb15k237 / wiki5m_*. Its only
+# task-specific text processing is the WordNet name parsing done for wn18rr, which would
+# erase CoDEx-M entity names; fb15k237 keeps them intact and is otherwise identical.
+simkgc_task: fb15k237
 
-# Cross-encoder training (matches sections/experimental_setup.tex).
+simkgc_data_dir: data/raw/CoDEx-M          # SimKGC-format JSON (train/valid/test.txt.json, entities.json)
+mining_dir: data/mining/CoDEx-M            # candidate shards from scripts/mine_candidates.py
+output_dir: checkpoints/reranker/CoDEx-M   # cross-encoder checkpoints from scripts/train_reranker.py
+
+# Bi-encoder (SimKGC). The paper uses the epoch-7 checkpoint of a run trained with
+# SimKGC's FB15k-237 recipe (scripts/train_fb.sh upstream); `biencoder` reproduces it.
+biencoder_checkpoint: checkpoints/biencoder/CoDEx-M/checkpoint_epoch7.mdl
+biencoder:
+  pooling: mean
+  lr: 1.0e-5
+  batch_size: 1024
+  epochs: 10
+  additive_margin: 0.02
+  pre_batch: 2
+  use_self_negative: true
+  finetune_t: true
+  use_link_graph: true
+  use_amp: true
+
+# Cross-encoder reranker
 pretrained_model: bert-base-uncased
-max_length: 128
+top_k: 50                       # candidates per query, in training and at test time
+max_length: 128                 # pairs: median 28, max 75 tokens (no truncation)
 per_device_train_batch_size: 16
-gradient_accumulation_steps: 2
+gradient_accumulation_steps: 2  # effective batch: 32 queries
 num_train_epochs: 4
 learning_rate: 2.0e-5
 weight_decay: 0.01
 warmup_ratio: 0.1
 max_grad_norm: 1.0
-dropout: 0.1
 bf16: true
-precision_notes: "BF16 mixed precision; effective batch size 32."
 
-# Inference-time gate.
-# Selected on validation by re-running gating across T in {1, 3, 5, 7, 9, 11, 13, 19}.
-# T = 9 is the validation-selected threshold for all three datasets in the paper.
-gate_threshold_T: 9
-
-# Per-bin fusion alphas (selected by validation grid search; values shown here are
-# the published unmasked-arm alphas. The masked arm picks different values; both are
-# re-derived at inference time by scripts/06_select_alpha.py, so these are reference only).
-alpha_bins_unmasked:
-  "1": 0.80
-  "2-9": 0.85
-  "10-99": 0.85
-  "100-999": null   # gate excludes
-  "1000+": null     # gate excludes
-alpha_bins_masked:
-  "1": 0.70
-  "2-9": 0.70
-  "10-99": 0.70
-  "100-999": null
-  "1000+": null
-
-# Bi-encoder (handled by vendored/SimKGC; this section just records what the paper used).
-biencoder_lr: 3.0e-5
-biencoder_batch_size: 256
-biencoder_epochs: 30
+# Selected on the validation split by scripts/evaluate.py
+gate_threshold_grid: [0, 1, 9, 99, 999, 10000]   # T = other known training answers; rerank iff T <= threshold
+alpha_grid_step: 0.05

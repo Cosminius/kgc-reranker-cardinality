@@ -1,35 +1,42 @@
+# WN18RR. Paths are relative to the repository root unless absolute.
+
 dataset: WN18RR
 
+# wn18rr makes SimKGC parse WordNet names such as "family_alcidae_NN_1"; required here.
+simkgc_task: wn18rr
+
 simkgc_data_dir: data/raw/WN18RR
-biencoder_checkpoint: checkpoints/biencoder/WN18RR/model_best.mdl
 mining_dir: data/mining/WN18RR
 output_dir: checkpoints/reranker/WN18RR
 
+# Bi-encoder (SimKGC): SimKGC's WN18RR recipe (scripts/train_wn.sh upstream);
+# the paper uses the epoch-48 checkpoint.
+biencoder_checkpoint: checkpoints/biencoder/WN18RR/checkpoint_epoch48.mdl
+biencoder:
+  pooling: mean
+  lr: 5.0e-5
+  batch_size: 1024
+  epochs: 50
+  additive_margin: 0.02
+  pre_batch: 0
+  use_self_negative: true
+  finetune_t: true
+  use_link_graph: true
+  use_amp: true
+
+# Cross-encoder reranker
 pretrained_model: bert-base-uncased
-max_length: 128
+top_k: 50
+max_length: 128                 # pairs: median 55, max 184 tokens (~0.4% truncated)
 per_device_train_batch_size: 16
-gradient_accumulation_steps: 2
+gradient_accumulation_steps: 2  # effective batch: 32 queries
 num_train_epochs: 4
 learning_rate: 2.0e-5
 weight_decay: 0.01
 warmup_ratio: 0.1
 max_grad_norm: 1.0
-dropout: 0.1
 bf16: true
-# Sequence-length note: ~0.37% of WN18RR sequences exceed 128 tokens
-# under the unmasked-arm tokenization and are truncated. See main.pdf §4.2.
 
-gate_threshold_T: 9
-
-alpha_bins_unmasked:
-  "1": 0.55
-  "2-9": 0.70
-  "10-99": 0.90
-  "100-999": null
-  "1000+": null
-alpha_bins_masked:
-  "1": 0.55
-  "2-9": 0.50
-  "10-99": 0.35
-  "100-999": null
-  "1000+": null
+# Selected on the validation split by scripts/evaluate.py
+gate_threshold_grid: [0, 1, 9, 99, 999, 10000]
+alpha_grid_step: 0.05

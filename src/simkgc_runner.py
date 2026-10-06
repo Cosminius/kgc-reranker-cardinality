@@ -6,7 +6,7 @@ from pathlib import Path
 
 SIMKGC_URL = "https://github.com/intfloat/SimKGC.git"
 
-TASK = {"CoDEx-M": "codex-m", "FB15k-237": "fb15k237", "WN18RR": "wn18rr"}
+_FLAGS = ("use_self_negative", "finetune_t", "use_link_graph", "use_amp")
 
 
 def vendored(repo_root):
@@ -43,6 +43,23 @@ def patch_adamw(repo_root):
     print(f"patched {trainer}")
 
 
+def biencoder_args(cfg):
+    """SimKGC main.py arguments for the recipe in cfg["biencoder"] (mirrors upstream scripts/train_*.sh)."""
+    b = cfg["biencoder"]
+    args = [
+        "--task", cfg["simkgc_task"],
+        "--pretrained-model", cfg["pretrained_model"],
+        "--pooling", b["pooling"],
+        "--lr", str(b["lr"]),
+        "--batch-size", str(b["batch_size"]),
+        "--epochs", str(b["epochs"]),
+        "--additive-margin", str(b["additive_margin"]),
+        "--pre-batch", str(b["pre_batch"]),
+    ]
+    args += ["--" + f.replace("_", "-") for f in _FLAGS if b.get(f)]
+    return args
+
+
 def run_train_biencoder(repo_root, cfg, seed):
     simkgc = vendored(repo_root)
     if not simkgc.exists():
@@ -54,16 +71,10 @@ def run_train_biencoder(repo_root, cfg, seed):
 
     cmd = [
         sys.executable, str(simkgc / "main.py"),
-        "--task", TASK[cfg["dataset"]],
         "--train-path", str(data_dir / "train.txt.json"),
         "--valid-path", str(data_dir / "valid.txt.json"),
         "--model-dir", str(ckpt_dir),
-        "--pretrained-model", cfg["pretrained_model"],
-        "--lr", str(cfg["biencoder_lr"]),
-        "--batch-size", str(cfg["biencoder_batch_size"]),
-        "--epochs", str(cfg["biencoder_epochs"]),
-        "--use-amp", "--use-link-graph",
-    ]
+    ] + biencoder_args(cfg)
     if seed is not None:
         cmd += ["--seed", str(seed)]
 
