@@ -1,5 +1,5 @@
-"""Evaluate one dataset: select checkpoint, gate threshold and fusion weights on validation,
-then report MRR, Hits@k and paired significance tests on test.
+"""Evaluate one dataset: select the checkpoint and the fusion weights on validation,
+then report MRR, Hits@k and paired significance tests (overall and per cardinality bin) on test.
 
     python scripts/evaluate.py --config configs/codex-m.yaml \
         --checkpoint-dir checkpoints/reranker/CoDEx-M/unmasked --seed 0

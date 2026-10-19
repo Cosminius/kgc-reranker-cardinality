@@ -82,7 +82,7 @@ def train_reranker(cfg, repo_root, masked, seed):
         warmup_ratio=float(cfg["warmup_ratio"]),
         max_grad_norm=float(cfg["max_grad_norm"]),
         lr_scheduler_type="linear",
-        bf16=bool(cfg["bf16"]), tf32=True, torch_compile=True,
+        bf16=bool(cfg["bf16"]), tf32=True,
         dataloader_num_workers=4, dataloader_pin_memory=True,
         remove_unused_columns=False,
         logging_steps=50,

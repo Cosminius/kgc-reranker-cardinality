@@ -16,8 +16,7 @@ def load_triples(simkgc_data_dir, split):
 
 
 def build_train_only_valid_tails(simkgc_data_dir):
-    """Train-only (head, relation) -> {tail_ids}. Used by the mask and the gate;
-    must NEVER read valid/test or the gate sees test labels."""
+    """Train-only (head, relation) -> {tail_ids}, used for the cardinality and the masked loss."""
     index = defaultdict(set)
     for t in load_triples(simkgc_data_dir, "train"):
         index[(t["head_id"], t["relation"])].add(t["tail_id"])
@@ -34,7 +33,7 @@ def valid_query_map(triples):
 
 
 def correct_n_to_train_only(scored, query_index, train_only_index):
-    """Replace mining-time n_filtered (train+valid+test) with TRAIN-ONLY count."""
+    """Replace the mining-time count of other answers (train+valid+test) with the train-only count."""
     missing = 0
     for qid, r in scored.items():
         if qid not in query_index:

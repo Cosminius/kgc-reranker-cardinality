@@ -1,4 +1,5 @@
-"""Mine filtered top-K bi-encoder candidates for the train / valid / test splits."""
+"""Mine top-K bi-encoder candidates: unfiltered for train (the cross-encoder's training lists),
+filtered for valid and test (evaluation)."""
 
 import argparse
 

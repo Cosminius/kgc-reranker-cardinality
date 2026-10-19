@@ -10,7 +10,7 @@ import torch.nn.functional as F
 
 def build_filter_index(simkgc_data_dir):
     """All known valid tails per (head, relation), across train+valid+test.
-    Used at mining time only; the gate uses a train-only index."""
+    Used to filter the validation and test candidate lists; cardinality uses a train-only index."""
     index = defaultdict(set)
     for split in ("train", "valid", "test"):
         with open(Path(simkgc_data_dir, f"{split}.txt.json"), encoding="utf-8") as f:
@@ -41,8 +41,12 @@ def _import_simkgc(simkgc_repo):
             del sys.modules[m]
 
 
-def mine_top_k(queries, biencoder_ckpt, simkgc_repo, simkgc_data_dir, task, K=50):
-    """Filtered top-K bi-encoder candidates per query.
+def mine_top_k(queries, biencoder_ckpt, simkgc_repo, simkgc_data_dir, task, K=50, filtered=True):
+    """Top-K bi-encoder candidates per query.
+
+    With `filtered`, the other known answers of the query (train, validation and test) are
+    removed from the candidates, as in the filtered evaluation protocol. The training lists of
+    the cross-encoder are mined with `filtered=False`, so other answers can appear as negatives.
 
     `task` is passed to SimKGC as --task. It must be set explicitly: SimKGC's default
     (wn18rr) parses WordNet-style entity names and erases the names of other datasets.
@@ -93,7 +97,7 @@ def mine_top_k(queries, biencoder_ckpt, simkgc_repo, simkgc_data_dir, task, K=50
             sims = head_emb[s:e] @ ent_emb.T
             for j in range(e - s):
                 idxs = mask_idx[s + j]
-                if idxs:
+                if filtered and idxs:
                     sims[j].index_fill_(0, torch.tensor(idxs, dtype=torch.long, device=sims.device), -float("inf"))
             top_v, top_i = sims.topk(K, dim=-1)
             for j in range(e - s):
@@ -146,7 +150,7 @@ def mine_split(repo_root, cfg, split, K):
     records = mine_top_k(
         queries=queries, biencoder_ckpt=str(biencoder),
         simkgc_repo=str(simkgc_repo), simkgc_data_dir=str(simkgc_data_dir),
-        task=cfg["simkgc_task"], K=K,
+        task=cfg["simkgc_task"], K=K, filtered=(split != "train"),
     )
     for r in records:
         r["query_id"] = f"{split}_{r['query_id']}"

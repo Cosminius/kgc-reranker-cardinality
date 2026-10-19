@@ -44,7 +44,8 @@ Train the SimKGC bi-encoder:
 python scripts/train_biencoder.py --config configs/wn18rr.yaml --seed 0
 ```
 
-Mine the top-50 candidates for train, validation and test:
+Mine the top-50 candidates for train, validation and test (the training lists are not filtered,
+the validation and test lists are):
 ```
 python scripts/mine_candidates.py --config configs/wn18rr.yaml
 ```
@@ -60,8 +61,16 @@ python scripts/evaluate.py --config configs/wn18rr.yaml --seed 0 \
     --checkpoint-dir checkpoints/reranker/WN18RR/unmasked
 ```
 
-Results are written to `results/seed_0/`. The configs for CoDEx-M and FB15k-237 are in the
-same folder.
+Results are written to `results/seed_0/`: MRR and Hits@k per configuration and cardinality bin,
+the selected weights, paired significance tests (overall and per bin), and the per-query scores.
+From these scores, the sensitivity to K and the comparison with other groupings of queries are
+computed without a GPU:
+```
+python scripts/k_sensitivity.py --config configs/wn18rr.yaml --seed 0
+python scripts/routing_signals.py --config configs/wn18rr.yaml --seed 0
+```
+
+The configs for CoDEx-M and FB15k-237 are in the same folder.
 
 ## Notes
 
@@ -69,8 +78,6 @@ same folder.
   names in WordNet style, so keep `fb15k237` for the other datasets.
 * `--masked` (training) and `--arm masked` (evaluation) remove the other known training answers
   from the loss. This is the filtered model discussed in the paper.
-* `gate_threshold_grid` lets the pipeline skip the cross-encoder for high-cardinality queries.
-  Validation selects no gate on all three datasets, so the paper does not use it.
 
 ## License
 

@@ -71,11 +71,11 @@ class FusionRanks:
         return {q: int(self.table[q][self.grid.index(alpha_of(q) or 0.0)]) for q in self.qids}
 
 
-def select_alphas(fr, threshold_T):
-    """One weight per cardinality bin, from the validation queries the gate admits."""
-    return fr.select(fr.bin, admitted=lambda q: fr.n_train[q] <= threshold_T)
+def select_alphas(fr):
+    """One weight per cardinality bin, selected on the validation queries of that bin."""
+    return fr.select(fr.bin)
 
 
-def apply_fusion(fr, alphas, threshold_T):
-    """Per-bin fusion; queries above the gate threshold keep the bi-encoder ranking."""
-    return fr.ranks(lambda q: alphas.get(fr.bin(q)) if fr.n_train[q] <= threshold_T else None)
+def apply_fusion(fr, alphas):
+    """Per-bin fusion (CARF). A bin without validation queries keeps the bi-encoder ranking."""
+    return fr.ranks(lambda q: alphas.get(fr.bin(q)))
