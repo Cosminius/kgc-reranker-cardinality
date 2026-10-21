@@ -37,8 +37,6 @@ def bi_encoder_margin(scored):
 
 
 def _groupings(fit, scored, records, categories, min_relation_queries):
-    """name -> (group of a query, minimum number of fitting queries for a group to get its own weight).
-    The margin quantiles come from the queries used for fitting."""
     margin = bi_encoder_margin(scored)
     edges = np.quantile([margin[q] for q in fit.reranked], [0.2, 0.4, 0.6, 0.8])
 
@@ -58,7 +56,6 @@ def _groupings(fit, scored, records, categories, min_relation_queries):
 
 
 def _fit_and_rank(fit, target, group_of, min_queries):
-    """Ranks on `target` with one weight per group selected on `fit`, and the number of groups."""
     g = fit.select(lambda q: "all")["all"]
     counts = defaultdict(int)
     for q in fit.reranked:
@@ -68,7 +65,6 @@ def _fit_and_rank(fit, target, group_of, min_queries):
 
 
 def _split_pairs(scored, records, seed):
-    """Two halves of the queries; all queries of a (head, relation) pair are in the same half."""
     def pair(q):
         return records[q]["head_id"], records[q]["relation"]
 

@@ -12,7 +12,7 @@ import numpy as np
 
 MODELS = {"Cross-encoder": "rerank_scores", "Bi-encoder": "bi_scores"}
 WIKIDATA_SPARQL = "https://query.wikidata.org/sparql"
-USER_AGENT = "kgc-reranker-cardinality (https://github.com/Cosminius/kgc-reranker-cardinality)"
+USER_AGENT = "kgc-reranker-cardinality (academic research)"
 
 
 def wrong_first_choices(scored, records, min_cardinality=100):
