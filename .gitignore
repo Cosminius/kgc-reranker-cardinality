@@ -47,7 +47,7 @@ Thumbs.db
 # Notebook checkpoints
 .ipynb_checkpoints/
 
-# Local secrets (never)
+# Secrets
 .env
 .env.local
 kaggle.json

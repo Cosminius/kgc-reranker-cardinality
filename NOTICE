@@ -1,4 +1,4 @@
-Cardinality-Gated Reranking for Knowledge Graph Completion
+CARF: A Text-Only Reranking Pipeline with Cardinality-Aware Score Fusion for Knowledge Graph Completion
 Copyright 2026 Cosmin Rosculet and Gheorghe Cosmin Silaghi
 
 This product includes software developed by the authors

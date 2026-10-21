@@ -8,9 +8,8 @@ Run after scripts/evaluate.py, which saves the per-query scores:
 
 import argparse
 import json
-import pickle
 
-from _common import REPO_ROOT, load_config
+from _common import load_config, load_scored, results_prefix
 from src.analysis import total_mrr
 from src.evaluation import select_and_evaluate
 
@@ -38,10 +37,8 @@ def main():
     args = p.parse_args()
     cfg = load_config(args.config)
 
-    seed_tag = f"seed_{args.seed}" if args.seed is not None else "no_seed"
-    prefix = REPO_ROOT / "results" / seed_tag / f"{cfg['dataset'].lower().replace('-', '')}_{args.arm}"
-    valid = pickle.load(open(f"{prefix}_valid_scored.pkl", "rb"))
-    test = pickle.load(open(f"{prefix}_test_scored.pkl", "rb"))
+    prefix = results_prefix(cfg, args.seed, args.arm)
+    valid, test = load_scored(prefix, "valid"), load_scored(prefix, "test")
 
     rows = {}
     for k in args.ks:

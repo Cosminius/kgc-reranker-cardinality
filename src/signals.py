@@ -1,12 +1,13 @@
 """Other ways of grouping queries for score fusion: one weight per group, selected on validation.
 Groups with too few validation queries use the global weight."""
 
+import random
 from collections import defaultdict
 
 import numpy as np
 
 from .analysis import total_mrr
-from .fusion import FusionRanks, alpha_grid
+from .fusion import FusionRanks, alpha_grid, get_bin
 
 
 def relation_categories(train_triples):
@@ -35,50 +36,66 @@ def bi_encoder_margin(scored):
     return out
 
 
-def _fit(fr, group_of, fallback, min_queries):
+def _groupings(fit, scored, records, categories, min_relation_queries):
+    """name -> (group of a query, minimum number of fitting queries for a group to get its own weight).
+    The margin quantiles come from the queries used for fitting."""
+    margin = bi_encoder_margin(scored)
+    edges = np.quantile([margin[q] for q in fit.reranked], [0.2, 0.4, 0.6, 0.8])
+
+    def category(q):
+        rel = records[q]["relation"]
+        c = categories.get(rel.replace("inverse ", ""), "N-N")
+        return c[::-1] if rel.startswith("inverse ") else c   # head prediction swaps the sides
+
+    return {
+        "None (global fusion)": (lambda q: "all", 1),
+        "Cardinality bin": (lambda q: get_bin(scored[q]["n_filtered"] + 1), 1),
+        "Relation category (1-1, 1-N, N-1, N-N)": (category, 1),
+        "Bi-encoder margin (5 quantile bins)":
+            (lambda q: int(np.searchsorted(edges, margin[q])) if q in margin else 0, 1),
+        "Relation and direction": (lambda q: records[q]["relation"], min_relation_queries),
+    }
+
+
+def _fit_and_rank(fit, target, group_of, min_queries):
+    """Ranks on `target` with one weight per group selected on `fit`, and the number of groups."""
+    g = fit.select(lambda q: "all")["all"]
     counts = defaultdict(int)
-    for q in fr.reranked:
+    for q in fit.reranked:
         counts[group_of(q)] += 1
-    weights = fr.select(group_of)
-    return {g: (a if counts[g] >= min_queries else fallback) for g, a in weights.items()}
+    weights = {k: (a if counts[k] >= min_queries else g) for k, a in fit.select(group_of).items()}
+    return target.ranks(lambda q: weights.get(group_of(q), g)), len(weights)
+
+
+def _split_pairs(scored, records, seed):
+    """Two halves of the queries; all queries of a (head, relation) pair are in the same half."""
+    def pair(q):
+        return records[q]["head_id"], records[q]["relation"]
+
+    pairs = sorted({pair(q) for q in scored})
+    random.Random(seed).shuffle(pairs)
+    first = set(pairs[: len(pairs) // 2])
+    return [q for q in scored if pair(q) in first], [q for q in scored if pair(q) not in first]
 
 
 def compare_groupings(valid_scored, test_scored, valid_records, test_records, train_triples,
-                      step=0.05, min_relation_queries=30):
-    """Test MRR of fusion with one weight per group, for each grouping.
-    `*_records` map query_id to the mined record (for the relation of the query)."""
+                      step=0.05, min_relation_queries=30, seed=0):
+    """For each grouping: the number of weights, test MRR with the weights selected on validation,
+    and validation MRR of a two-fold cross-validation inside the validation set.
+    `*_records` map query_id to the mined record (for the head and relation of the query)."""
     grid = alpha_grid(step)
-    valid, test = FusionRanks(valid_scored, grid), FusionRanks(test_scored, grid)
-    g = valid.select(lambda q: "all")["all"]
-
+    scored = {**valid_scored, **test_scored}
+    records = {**valid_records, **test_records}
     categories = relation_categories(train_triples)
 
-    def category(records):
-        def f(q):
-            rel = records[q]["relation"]
-            c = categories.get(rel.replace("inverse ", ""), "N-N")
-            return c[::-1] if rel.startswith("inverse ") else c   # head prediction swaps the sides
-        return f
+    def run(fit, target):
+        return {name: _fit_and_rank(fit, target, *g)
+                for name, g in _groupings(fit, scored, records, categories, min_relation_queries).items()}
 
-    valid_margin, test_margin = bi_encoder_margin(valid_scored), bi_encoder_margin(test_scored)
-    edges = np.quantile(list(valid_margin.values()), [0.2, 0.4, 0.6, 0.8])
-
-    def margin(m):
-        return lambda q: int(np.searchsorted(edges, m[q])) if q in m else 0
-
-    def relation(records):
-        return lambda q: records[q]["relation"]
-
-    groupings = {
-        "None (global fusion)": (lambda q: "all", lambda q: "all", 1),
-        "Cardinality bin": (valid.bin, test.bin, 1),
-        "Relation category (1-1, 1-N, N-1, N-N)": (category(valid_records), category(test_records), 1),
-        "Bi-encoder margin (5 quantile bins)": (margin(valid_margin), margin(test_margin), 1),
-        "Relation and direction": (relation(valid_records), relation(test_records), min_relation_queries),
-    }
-    out = {}
-    for name, (valid_group, test_group, min_q) in groupings.items():
-        weights = _fit(valid, valid_group, g, min_q)
-        out[name] = {"groups": len(weights),
-                     "mrr": total_mrr(test.ranks(lambda q: weights.get(test_group(q), g)))}
-    return out
+    on_test = run(FusionRanks(valid_scored, grid), FusionRanks(test_scored, grid))
+    a, b = (FusionRanks({q: valid_scored[q] for q in half}, grid)
+            for half in _split_pairs(valid_scored, valid_records, seed))
+    on_b, on_a = run(a, b), run(b, a)
+    return {name: {"groups": n, "mrr": total_mrr(ranks),
+                   "cv_mrr": total_mrr({**on_a[name][0], **on_b[name][0]})}
+            for name, (ranks, n) in on_test.items()}

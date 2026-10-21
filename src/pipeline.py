@@ -8,8 +8,6 @@ The test split is scored once, with those choices, and is only used for reportin
 """
 
 import gc
-import glob
-import json
 import pickle
 import random
 from pathlib import Path
@@ -20,7 +18,8 @@ from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 from .analysis import build_result_record, total_mrr, write_rank_csv, write_results
 from .collator import UnmaskedKGCCollator
-from .datasets import build_train_only_valid_tails, correct_n_to_train_only, load_entity_text_map
+from .datasets import (build_train_only_valid_tails, correct_n_to_train_only, load_candidates,
+                       load_entity_text_map)
 from .evaluation import CONFIG_NAMES, select_and_evaluate, significance
 from .scoring import autocast_dtype, compute_bi_and_re_ranks, score_queries
 
@@ -32,13 +31,6 @@ def _set_seed(seed):
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
-
-
-def load_candidates(mining_dir, split, top_k):
-    shards = sorted(glob.glob(str(Path(mining_dir) / f"{split}_k{top_k}" / "shard_*.jsonl")))
-    if not shards:
-        raise SystemExit(f"No {split}_k{top_k} shards in {mining_dir}; run scripts/mine_candidates.py first")
-    return [json.loads(line) for f in shards for line in open(f, encoding="utf-8")]
 
 
 def _score(records, checkpoint, collator, device, dtype, train_only):
@@ -67,7 +59,7 @@ def evaluate_pipeline(cfg, repo_root, checkpoints, arm, seed):
     collator = UnmaskedKGCCollator(tokenizer=tokenizer, entity_text_map=load_entity_text_map(data_dir),
                                    max_length=cfg["max_length"])
 
-    # 1) checkpoint: best validation MRR of the reranker alone
+    # checkpoint: best validation MRR of the reranker alone
     best = None
     checkpoint_mrr = {}
     for ckpt in checkpoints:

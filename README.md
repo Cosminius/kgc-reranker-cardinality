@@ -1,7 +1,7 @@
 ## CARF: Cardinality-Aware Reranking and Fusion
 
-Code for the paper "Keeping It Simple: A Text-Only Reranking Pipeline with Cardinality-Aware
-Score Fusion for Knowledge Graph Completion" (Cosmin Rosculet, Gheorghe Cosmin Silaghi).
+Code for the paper "CARF: A Text-Only Reranking Pipeline with Cardinality-Aware Score Fusion
+for Knowledge Graph Completion" (Cosmin Rosculet, Gheorghe Cosmin Silaghi).
 
 CARF reranks the top-50 candidates of a SimKGC bi-encoder with a BERT-base cross-encoder and
 mixes the two scores with one weight per cardinality bin, where cardinality is the number of
@@ -63,12 +63,16 @@ python scripts/evaluate.py --config configs/wn18rr.yaml --seed 0 \
 
 Results are written to `results/seed_0/`: MRR and Hits@k per configuration and cardinality bin,
 the selected weights, paired significance tests (overall and per bin), and the per-query scores.
-From these scores, the sensitivity to K and the comparison with other groupings of queries are
-computed without a GPU:
+From these scores, the sensitivity to K, the comparison with other groupings of queries (on test
+and in a two-fold cross-validation inside the validation set) and the wrong first choices on
+queries with many known answers are computed without a GPU:
 ```
 python scripts/k_sensitivity.py --config configs/wn18rr.yaml --seed 0
 python scripts/routing_signals.py --config configs/wn18rr.yaml --seed 0
+python scripts/error_analysis.py --config configs/wn18rr.yaml --seed 0
 ```
+For CoDEx-M, `--wikidata` also checks a sample of the wrong first choices against Wikidata
+(needs internet access).
 
 The configs for CoDEx-M and FB15k-237 are in the same folder.
 
